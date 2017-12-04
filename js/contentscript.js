@@ -58,7 +58,6 @@ chrome.extension.onMessage.addListener(function(msg, sender, sendResponse) {
 });
 chrome.runtime.sendMessage({action: 'unprocessed'}, function(response) {
   makeToasts(response)
-  console.log('unprocessed')
 });
 
 function makeToasts(msg){
@@ -118,7 +117,7 @@ function makeToasts(msg){
                   if(typeof document.getElementsByTagName('a')[j].innerText != undefined
                     && document.getElementsByTagName('a')[j].innerText.length > 5){
                        message_view = document.getElementsByTagName('a')[j].innerText;
-                       break
+                       break;
                   // } else if(typeof document.getElementsByTagName('a')[j].title != undefined){
                   //     message_view = document.getElementsByTagName('a')[j].title
                           
@@ -177,7 +176,7 @@ addEvent(document, "click", function(event) {
 });
 
 addEvent(document, "keydown", function (e) {
-    if (e.shiftKey  &&  e.altKey) {
+    if (e.altKey) {
       if(+e.keyCode > 47 && +e.keyCode < 58) {
         console.log(e.keyCode)
       //Add if shortcut click option is activated

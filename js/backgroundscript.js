@@ -18,19 +18,19 @@ function publishError(message){
 if(ShortClick_profile.isNew()) {
 	ShortClick_profile.createTable("profile", ["token", "auth"]);
 	ShortClick_profile.commit();
-// 	ShortClick_profile.createTable("blocked_websites",["web_host"]);
-// 	ShortClick_profile.commit();
-// 	ShortClick_profile.createTable("blocked_webpages",["web_href"]);
-// 	ShortClick_profile.commit();
+	ShortClick_profile.createTable("blocked_websites",["web_host"]);
+	ShortClick_profile.commit();
+	ShortClick_profile.createTable("blocked_webpages",["web_href"]);
+	ShortClick_profile.commit();
 }
-// if(ShortClick_local_clickables.isNew()) {
-// 	ShortClick_local_clickables.createTable("pageanchor", ["pagehref", "elementhref", "text", "clicks"]);
-// 	ShortClick_local_clickables.commit();
-// 	ShortClick_local_clickables.createTable("pages", ["webhref", "pagehref"]);
-// 	ShortClick_local_clickables.commit();
-// 	ShortClick_local_clickables.createTable("pageselectable", ["pagehref", "coordx", "coordy"]);
-// 	ShortClick_local_clickables.commit();
-// }
+if(ShortClick_local_clickables.isNew()) {
+	ShortClick_local_clickables.createTable("pageanchor", ["pagehref", "elementhref", "text", "clicks"]);
+	ShortClick_local_clickables.commit();
+	ShortClick_local_clickables.createTable("pages", ["webhref", "pagehref"]);
+	ShortClick_local_clickables.commit();
+	ShortClick_local_clickables.createTable("pageselectable", ["pagehref", "coordx", "coordy"]);
+	ShortClick_local_clickables.commit();
+}
 
 // function makeid() {
 //   var text = "";
@@ -66,24 +66,29 @@ function basicResponse(msg) {
 	}
 	return connection
 }
+
 var previous_hang = {}
-var thing = []
+var recommendations = []
 // var bob ='ok'
 function handleRecommendation(msg, tabID) {
 	// console.log(msg)
 	if(msg.length > 1){
 		json_item = JSON.parse(msg)
 		var page = json_item['page']
-		thing.push(json_item['recommendations'])
-		console.log(thing[thing.length - 1])
-		chrome.tabs.sendMessage(tabID, {action: "feedback_info", update: true, typ: "single", items: json_item['recommendations']}, function(response) {
-			if(response == undefined){
-				chrome.tabs.sendMessage(tabID, {update: true}, function(response){
-					console.log("first send")
-				})
-			}
+		var site = json_item['site']
+		recommendations = []
+		if(!(isBlockedURI(page) || isBlockedURI('',site))) {
+			recommendations.push(json_item['recommendations'])
+			console.log(recommendations[recommendations.length - 1])
+			chrome.tabs.sendMessage(tabID, {action: "feedback_info", update: true, typ: "single", items: json_item['recommendations']}, function(response) {
+				if(response == undefined){
+					chrome.tabs.sendMessage(tabID, {update: true}, function(response){
+						console.log("first send")
+					})
+				}
 				// // handler();
-		});
+			});
+		}
 
 	}
 	// alert(JSON.parse(JSON.stringify(msg)))
@@ -91,28 +96,21 @@ function handleRecommendation(msg, tabID) {
 	// ["recommendations"]
 	// .replace(/(\]|\[)/g,'').split(',').map(Number);
 }
-// function sendback(thing){ 
-// 	chrome.tabs.sendMessage(tabID, {action: "feedback_info", items: thing}, function(response) {
-		
+// function sendback(recommendations){ 
+// 	chrome.tabs.sendMessage(tabID, {action: "feedback_info", items: recommendations}, function(response) {
+
 // 	});
 // }
 chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
-	sendResponse({items: thing[thing.length-1], typ:"single", update: true})
-});
-
-function cc(){
-	chrome.tabs.sendMessage(tabID, {action: "feedback_info", typ: "single", items: json_item['recommendations']}, function(response) {
-	if(response == undefined){
-		chrome.tabs.sendMessage(tabID, {update: true}, function(response){
-			console.log("first send")
-		})
+	if(msg.action == 'unprocessed'){
+		if(recommendations.length > 0){
+			sendResponse({items: recommendations[recommendations.length-1], typ:"single", update: true})
+		}
 	}
-		// // handler();
 });
-}
 
 // function handler(tabID){
-// 	chrome.tabs.sendMessage(tabID, {action: "feedback_info", typ: "single", items: thing[thing.length - 1]}, function(response) {
+// 	chrome.tabs.sendMessage(tabID, {action: "feedback_info", typ: "single", items: recommendations[recommendations.length - 1]}, function(response) {
 // 	 console.log('checkED')
 // 	});
 // }
@@ -241,7 +239,6 @@ function postRequest(tabID, uri, url, request_type, callback) {
 	var postUrl = ''
 	if(request_type == "add"){
 		postUrl = shortclickhost+'/add_website';
-	// } else if(request_type == "get"){
 
 	}
     // Set up an asynchronous AJAX POST request
@@ -272,6 +269,109 @@ function logging(tes) {
 	chrome.runtime.sendMessage({updateprivate: tes.auth}, function(response) {
 	});
 
+}
+
+
+// Requesting statement if item is blocked
+chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
+	if(msg.isBlocked == "webpage") {
+		chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+			var currTab = tabs[0];
+			sendResponse((typeof ShortClick_profile.queryAll("blocked_webpages", {
+				query: { web_href: new URL(currTab.url).href }
+			})[0] != "undefined").toString());
+		});
+		// To deal with asynchronous tasks we must return true;
+		return true;
+	} else if(msg.isBlocked == "website") {
+		chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+			var currTab = tabs[0];
+			sendResponse((typeof ShortClick_profile.queryAll("blocked_websites", {
+				query: { web_host: new URL(currTab.url).hostname }
+			})[0] != "undefined").toString());
+		});
+		return true;
+	}
+})
+
+chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
+	if(msg) {
+		var operation = -1, query = { active: true, currentWindow: true };
+		if(msg.block_website || msg.block_webpage){
+			if(msg.block_website) {
+				operation = 0;
+			} else if(msg.block_webpage) {
+				operation = 1;
+			}
+			chrome.tabs.query(query,function(tabs) {
+				var currentTab = tabs[0];
+				var url = new URL(currentTab.url)
+				blockRequest(url.href, url.hostname, operation)
+			});
+		}
+	} 
+});
+
+/**
+* Method that blocks toats to be  fired from the webpage or websites
+* @params {string} URI_href
+* @params {string} URI_host
+* @params {number} operation
+**/
+function blockRequest(URI_href, URI_host, operation) {
+	console.log(URI_href+" "+URI_host+" "+operation);
+	if(operation == 1) {
+		var query = ShortClick_profile.queryAll("blocked_webpages", {
+			query: {web_href:URI_href}
+		})
+		if(0 == query.length) {
+			ShortClick_profile.insert("blocked_webpages", {web_href: URI_href})
+		}else {
+			ShortClick_profile.deleteRows("blocked_webpages", {web_href: query[0].web_href});
+		}
+		ShortClick_profile.commit();
+		console.log(ShortClick_profile.queryAll("blocked_webpages", {
+			query: {web_href:URI_href}
+		}))
+	} else if(operation == 0) {
+		var query = ShortClick_profile.queryAll("blocked_websites", {
+			query: {web_host:URI_host}
+		})
+		if( 0 == query.length) {
+			ShortClick_profile.insert("blocked_websites", {web_host: URI_host})
+		}else{
+			ShortClick_profile.deleteRows("blocked_websites", {web_host: query[0].web_host});
+		}
+		ShortClick_profile.commit();
+		console.log(ShortClick_profile.queryAll("blocked_websites", {
+			query: {web_host:URI_host}
+		}))
+	}
+}
+
+/**
+* Method that checks if the website or webpage is blocked
+* Used by the BackgroundScript only, to avoid post requests
+* @params {string} href , page uri
+* @params {string} hostname , website hostname
+* @returns {boolean} if element is blocked
+**/
+function isBlockedURI(href, hostname) {
+	if(typeof hostname == 'undefined') {
+		hostname = "";
+	}
+	if(typeof href == 'undefined') {
+		href = "";
+	}
+	if(href.length > 0) {
+		return (0 != ShortClick_profile.queryAll("blocked_webpages", {
+			query: { web_href:href }
+		}).length)
+	}else if(hostname.length > 0) {
+		return (0 != ShortClick_profile.queryAll("blocked_websites", {
+			query: { web_host:hostname }
+		}).length)
+	}
 }
 
 /**
