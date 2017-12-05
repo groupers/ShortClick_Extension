@@ -6,8 +6,6 @@ var pageTab = {}
 var connection = true
 var tab_logs = []
 var tab_logs_time = []
-// chrome.tabs.sendMessage(tabID, {action: "feedback_info", numbers: numbers, update: update}, function(response) {
-// 	});
 
 function publishError(message){
 	chrome.runtime.sendMessage({error: message}, function(response){
@@ -32,21 +30,9 @@ if(ShortClick_local_clickables.isNew()) {
 	ShortClick_local_clickables.commit();
 }
 
-// function makeid() {
-//   var text = "";
-//   var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-
-//   for (var i = 0; i < 20; i++)
-//     text += possible.charAt(Math.floor(Math.random() * possible.length));
-
-//   return text;
-// }
-
 // Profile creation
 if(typeof ShortClick_profile.queryAll("profile")[0] === "undefined") {
-	// if(checkConnection("Basic", basicResponse)){
 		fetchFileContent(shortclickhost+"/user/create", createUser)
-	// }
 }
 
 function createUser(creditionals) {
@@ -67,53 +53,38 @@ function basicResponse(msg) {
 	return connection
 }
 
-var previous_hang = {}
+var recommendations_per_page = {}
 var recommendations = []
-// var bob ='ok'
 function handleRecommendation(msg, tabID) {
-	// console.log(msg)
 	if(msg.length > 1){
 		json_item = JSON.parse(msg)
 		var page = json_item['page']
 		var site = json_item['site']
 		recommendations = []
+		recommendations_per_page[page] = json_item['recommendations']
 		if(!(isBlockedURI(page) || isBlockedURI('',site))) {
 			recommendations.push(json_item['recommendations'])
-			console.log(recommendations[recommendations.length - 1])
+			// console.log(recommendations[recommendations.length - 1])
 			chrome.tabs.sendMessage(tabID, {action: "feedback_info", update: true, typ: "single", items: json_item['recommendations']}, function(response) {
 				if(response == undefined){
 					chrome.tabs.sendMessage(tabID, {update: true}, function(response){
 						console.log("first send")
 					})
 				}
-				// // handler();
+
 			});
 		}
 
 	}
-	// alert(JSON.parse(JSON.stringify(msg)))
-	// console.log(JSON.parse(JSON.stringify(msg))['recommendations'])
-	// ["recommendations"]
-	// .replace(/(\]|\[)/g,'').split(',').map(Number);
 }
-// function sendback(recommendations){ 
-// 	chrome.tabs.sendMessage(tabID, {action: "feedback_info", items: recommendations}, function(response) {
 
-// 	});
-// }
 chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
 	if(msg.action == 'unprocessed'){
-		if(recommendations.length > 0){
-			sendResponse({items: recommendations[recommendations.length-1], typ:"single", update: true})
+		if(recommendations.length > 0 && recommendations_per_page[msg.page]){
+			sendResponse({items: recommendations_per_page[msg.page], typ:"single", update: true})
 		}
 	}
 });
-
-// function handler(tabID){
-// 	chrome.tabs.sendMessage(tabID, {action: "feedback_info", typ: "single", items: recommendations[recommendations.length - 1]}, function(response) {
-// 	 console.log('checkED')
-// 	});
-// }
 
 chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) { 
 	chrome.tabs.getSelected(null, function(tab) {
@@ -122,17 +93,11 @@ chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
 			|| tab_logs[ tab_logs.length - 1] !== tab.url) {
 			hostname = extractHostname(tab.url)
 		if(!(["devtools","extensions","newtab","localhost"].indexOf(hostname) >= 0)){
-				// if(checkConnection("Basic", basicResponse)){
+
 					pageTab[tabId] = tab.url
 					console.log(tab.url)
 					postRequest(tabId, hostname, tab.url, "add", handleRecommendation)
-				// } else {
-					// console.log("Disconnected")
-				// }
-					// recommendations = postRequest(tabId, hostname, tab.url, "get", basicResponse)
 				}
-		// chrome.tabs.sendMessage(tabId, {action: "refresh"}, function(response) {
-		// });
 	}
 	tab_logs.push(tab)
 	tab_logs_time.push(new Date())
@@ -157,20 +122,6 @@ function extractHostname(url) {
 
     return hostname;
 }
-
-function checkConnection(type, response) {
-
-	if(type === "Auth"){
-		fetchFileContent()
-	} else {
-		return fetchFileContent(shortclickhost, response)
-	}
-	// profile = ShortClick_profile.queryAll("profile")[0]
-	// if(profile && profile.privatekey && profile.token){
-	// 	fetchValidStatus(shortclickhost+"/popclick/api/validprofile/"+profile.token+"/", profile.privatekey, validAuthentication)
-	// }
-}
-
 
 /** 
 * Returns today's date
@@ -235,31 +186,37 @@ function postFormat(token, auth, website, webpage) {
 
 function postRequest(tabID, uri, url, request_type, callback) {
 	profile = ShortClick_profile.queryAll("profile")[0]
-	// page = postFormat()
 	var postUrl = ''
-	if(request_type == "add"){
-		postUrl = shortclickhost+'/add_website';
 
+	if(typeof ShortClick_profile.queryAll("profile")[0] === 'undefined'){
+		fetchFileContent(shortclickhost+"/user/create", createUser)
+		console.log('no connection')
+	} else {
+
+		if(request_type == "add"){
+			postUrl = shortclickhost+'/add_website';
+
+		} 
+	    // Set up an asynchronous AJAX POST request
+	    var xhr = new XMLHttpRequest();
+	    xhr.open('POST', postUrl, true);
+	    xhr.setRequestHeader("Content-Type", "application/json");
+	    // Handle request state change events
+	    xhr.onreadystatechange = function() {
+	    	if (xhr.readyState == 4) {
+	    		if (xhr.status == 200) {
+	    			if (callback) {
+	    				callback(xhr.responseText, tabID);
+	    				// return true;
+	    			}
+	    		}
+	    	}
+	    };
+	    xhr.timeout = 5000;
+	    // Sending selectable
+	    post = postFormat(profile.token, profile.auth, uri, url)
+	    xhr.send(post);
 	}
-    // Set up an asynchronous AJAX POST request
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', postUrl, true);
-    xhr.setRequestHeader("Content-Type", "application/json");
-    // Handle request state change events
-    xhr.onreadystatechange = function() {
-    	if (xhr.readyState == 4) {
-    		if (xhr.status == 200) {
-    			if (callback) {
-    				callback(xhr.responseText, tabID);
-    				// return true;
-    			}
-    		}
-    	}
-    };
-    xhr.timeout = 5000;
-    // Sending selectable
-    post = postFormat(profile.token, profile.auth, uri, url)
-    xhr.send(post);
 }
 
 // Logging handle

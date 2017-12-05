@@ -56,7 +56,7 @@ chrome.extension.onMessage.addListener(function(msg, sender, sendResponse) {
     makeToasts(msg)
   }
 });
-chrome.runtime.sendMessage({action: 'unprocessed'}, function(response) {
+chrome.runtime.sendMessage({action: 'unprocessed', page: document.location.href}, function(response) {
   makeToasts(response)
 });
 
